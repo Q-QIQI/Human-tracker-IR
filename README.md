@@ -90,20 +90,3 @@ The system was extensively tested on a hybrid dataset comprising the SYSU public
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | Baseline YOLOv8n | 16.5% | 16.0% | 36.1% | 0.22 | - |
 | **Our Fusion Model** | **92.0%** | **86.0%** | **88.5%** | **0.87** | **~30 FPS** |
-
-## 📜 Citation
-
-If you find this project or the proposed filtering pipeline helpful for your research, please consider citing our paper:
-
-```bibtex
-@article{your_paper_id_2024,
-  title={Your Paper Title Here},
-  author={Your Name and Co-authors},
-  journal={Name of Conference/Journal},
-  year={2024}
-}
-```
-
-## 📞 Contact
-
-For any questions, issues, or collaboration inquiries, please open an issue in this repository or contact: **[Your Email Address]**
