@@ -41,8 +41,8 @@ human_tracker/
 * **Sensor**: Intel RealSense D435i Camera
 
 ### Software & Dependencies
-* **OS**: Ubuntu 20.04 / 22.04
-* **Middleware**: ROS2 (Foxy / Humble)
+* **OS**: Ubuntu 22.04
+* **Middleware**: ROS2 (Humble)
 * **Python Packages**:
   ```bash
   pip install ultralytics opencv-python numpy pandas
