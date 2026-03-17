@@ -32,7 +32,9 @@ class Go2Follower(Node):
         self.last_known_x_percent = 0.5
         self.is_searching = False
         self.search_start_time = 0.0
-        self.MAX_SEARCH_TIME = 8.0       # 原地转圈寻找的最长时间
+        
+        self.COASTING_TIME = 1.5         # ✨ 新增：短暂丢失时的减速滑行时间 (秒)
+        self.MAX_SEARCH_TIME = 8.0       # 原地转圈寻找的最长时间 (秒)
 
         # 接收 Tracker 发来的目标位置
         self.sub_target = self.create_subscription(
@@ -48,6 +50,10 @@ class Go2Follower(Node):
         self.target_locked = False
         self.target_z = 0.0
         self.target_x = 0.0
+
+        # ✨ 新增：缓存最后一帧的速度，用于“减速盲跟”
+        self.last_vx = 0.0
+        self.last_vyaw = 0.0
 
     def send_unitree_move_cmd(self, vx, vy, vyaw):
         """ 🟢 核心封装：向 Unitree ROS2 接口发送 Move 指令 """
@@ -83,7 +89,7 @@ class Go2Follower(Node):
         now = time.time()
         time_since_last_msg = now - self.last_msg_time
 
-        # 1. 致命超时保护 (视觉节点死机时急刹车)
+        # 1. 致命超时保护 (视觉节点完全死机时急刹车)
         if time_since_last_msg > 1.0:
             self.stop_robot()
             return
@@ -91,7 +97,9 @@ class Go2Follower(Node):
         vx = 0.0
         vyaw = 0.0
 
-        # 2. 正常跟随模式
+        # =========================================================
+        # 2. 正常跟随模式 (Target Locked)
+        # =========================================================
         if self.target_locked:
             # --- 前后控制 ---
             speed_factor = (self.target_z - self.PERSON_CLOSE_DIST) / (self.PERSON_FAR_DIST - self.PERSON_CLOSE_DIST)
@@ -113,24 +121,43 @@ class Go2Follower(Node):
             if abs(vyaw) > 0.1 and abs(norm_center_x - 0.5) > 0.25:
                 vx *= 0.3 
 
+            # ✨ 核心新增：记忆当前计算出的速度，以备丢失时使用
+            self.last_vx = vx
+            self.last_vyaw = vyaw
+
             self.send_unitree_move_cmd(vx, 0.0, vyaw)
 
-        # 3. 丢失目标后的智能搜寻模式
+        # =========================================================
+        # 3. 丢失目标后的高级状态机 (Target Lost / Occluded)
+        # =========================================================
         else:
             if not self.is_searching:
                 self.is_searching = True
                 self.search_start_time = now
-                self.get_logger().warn("Target lost! Initiating smart search rotation...")
+                self.get_logger().warn("Target occluded! Entering state machine...")
 
             search_duration = now - self.search_start_time
-            if search_duration < self.MAX_SEARCH_TIME:
-                # 往消失的方向原地转圈找人
+
+            # ✨ 状态 A：短暂遮挡的减速盲跟期 (Brief Occlusion)
+            if search_duration < self.COASTING_TIME:
+                # 速度衰减系数。在 50Hz 的循环下，0.95 会带来非常顺滑的物理减速刹车感
+                self.last_vx *= 0.95
+                self.last_vyaw *= 0.95
+                
+                # 顺着刚丢失前的方向和不断减小的速度，凭惯性盲滑一小段
+                self.send_unitree_move_cmd(self.last_vx, 0.0, self.last_vyaw)
+
+            # ✨ 状态 B：原地打转的主动搜寻期 (Active Search)
+            elif search_duration < self.MAX_SEARCH_TIME:
+                # 此时前向速度（Vx）彻底归零，全副精力用于原地旋转找人
                 if self.last_known_x_percent < 0.5:
                     vyaw = self.SEARCH_TURN_SPEED
                 else:
                     vyaw = -self.SEARCH_TURN_SPEED
                 
                 self.send_unitree_move_cmd(0.0, 0.0, vyaw)
+
+            # ✨ 状态 C：长时间找不到，放弃并待命 (Completely Lost)
             else:
                 self.stop_robot()
 
