@@ -26,7 +26,7 @@ class DepthTracker(Node):
         pkg_share = get_package_share_directory('human_tracker')
         model_dir = os.path.join(pkg_share, 'models')
 
-        custom_model_path = os.path.join(model_dir, 'best.pt')
+        custom_model_path = os.path.join(model_dir, 'fusion.pt')
 
         if not os.path.exists(custom_model_path):
             raise FileNotFoundError(f"Missing model: {custom_model_path}")
