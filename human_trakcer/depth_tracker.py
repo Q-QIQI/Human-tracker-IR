@@ -23,7 +23,6 @@ class DepthTracker(Node):
         self.bridge = CvBridge()
         self.get_logger().info("Initializing ROS2 2.5D Tracker with Anti-Occlusion (Single Model)...")
 
-        # Load ONLY the fine-tuned custom model correctly from ROS2 package share
         pkg_share = get_package_share_directory('human_tracker')
         model_dir = os.path.join(pkg_share, 'models')
 
@@ -32,7 +31,6 @@ class DepthTracker(Node):
         if not os.path.exists(custom_model_path):
             raise FileNotFoundError(f"Missing model: {custom_model_path}")
 
-        # Initialize the single lightweight YOLOv8n model
         self.model_custom = YOLO(custom_model_path)
 
         self.clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
@@ -151,7 +149,6 @@ class DepthTracker(Node):
             enhanced_ir = self.clahe.apply(norm_ir)
             cv_img = cv2.cvtColor(enhanced_ir, cv2.COLOR_GRAY2BGR)
 
-            # Replaced ensemble call with single model prediction
             raw_boxes = self.get_predictions(cv_img)
 
             candidates = []
