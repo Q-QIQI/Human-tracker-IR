@@ -21,21 +21,18 @@ class DepthTracker(Node):
     def __init__(self):
         super().__init__('depth_tracker')
         self.bridge = CvBridge()
-        self.get_logger().info("Initializing ROS2 2.5D Tracker with Anti-Occlusion...")
+        self.get_logger().info("Initializing ROS2 2.5D Tracker with Anti-Occlusion (Single Model)...")
 
-        # Load models correctly from ROS2 package share
+        # Load ONLY the fine-tuned custom model correctly from ROS2 package share
         pkg_share = get_package_share_directory('human_tracker')
         model_dir = os.path.join(pkg_share, 'models')
 
-        base_model_path = os.path.join(model_dir, 'yolov8n.pt')
         custom_model_path = os.path.join(model_dir, 'best.pt')
 
-        if not os.path.exists(base_model_path):
-            raise FileNotFoundError(f"Missing model: {base_model_path}")
         if not os.path.exists(custom_model_path):
             raise FileNotFoundError(f"Missing model: {custom_model_path}")
 
-        self.model_base = YOLO(base_model_path)
+        # Initialize the single lightweight YOLOv8n model
         self.model_custom = YOLO(custom_model_path)
 
         self.clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
@@ -110,31 +107,18 @@ class DepthTracker(Node):
         real_width = (pixel_w * depth_m) / fx
         return (0.15 < real_width < 1.2), real_width
 
-    def ensemble_predictions(self, img):
-        res_base = self.model_base(img, imgsz=640, conf=0.35, classes=[0], verbose=False)[0]
+    def get_predictions(self, img):
+        """
+        Refactored: Pure single-model inference matching the paper's methodology.
+        Extremely fast, low overhead.
+        """
         res_custom = self.model_custom(img, imgsz=640, conf=0.40, classes=[0], verbose=False)[0]
 
-        boxes_list = []
-        scores_list = []
-
-        for res in [res_base, res_custom]:
-            if res.boxes is not None:
-                for box in res.boxes:
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                    boxes_list.append([int(x1), int(y1), int(x2 - x1), int(y2 - y1)])
-                    scores_list.append(float(box.conf[0].cpu().numpy()))
-
         final_boxes = []
-        if boxes_list:
-            indices = cv2.dnn.NMSBoxes(
-                boxes_list, scores_list,
-                score_threshold=0.35,
-                nms_threshold=0.45)
-
-            if len(indices) > 0:
-                for i in indices.flatten():
-                    x, y, w, h = boxes_list[i]
-                    final_boxes.append([x, y, x + w, y + h])
+        if res_custom.boxes is not None:
+            for box in res_custom.boxes:
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                final_boxes.append([int(x1), int(y1), int(x2), int(y2)])
 
         return final_boxes
 
@@ -167,7 +151,8 @@ class DepthTracker(Node):
             enhanced_ir = self.clahe.apply(norm_ir)
             cv_img = cv2.cvtColor(enhanced_ir, cv2.COLOR_GRAY2BGR)
 
-            raw_boxes = self.ensemble_predictions(cv_img)
+            # Replaced ensemble call with single model prediction
+            raw_boxes = self.get_predictions(cv_img)
 
             candidates = []
             for box in raw_boxes:
